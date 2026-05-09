@@ -1,169 +1,78 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import hljs from 'highlight.js';
-import 'highlight.js/styles/atom-one-dark.css';
-import { generateOutlookHTML, generateRTF } from './htmlConverter';
+import React, { useMemo, useState } from "react";
+import hljs from "highlight.js";
+import "highlight.js/styles/atom-one-dark.css";
 
-const sample = `function hello(name) {
-  console.log('Hello, ' + name + '!');
+function toInlineStyles(html: string): string {
+  // Map common highlight.js classes to inline styles (Outlook-safe)
+  const map: Record<string, string> = {
+    "hljs-keyword": "color:#800000;font-weight:bold;",
+    "hljs-built_in": "color:#800000;font-weight:bold;",
+    "hljs-literal": "color:#800000;font-weight:bold;",
+    "hljs-string": "color:#0000e6;",
+    "hljs-number": "color:#0000e6;",
+    "hljs-comment": "color:#008000;font-style:italic;",
+    "hljs-function": "color:#800000;font-weight:bold;",
+    "hljs-title": "color:#800000;font-weight:bold;",
+    "hljs-params": "color:#808030;",
+    "hljs-operator": "color:#808030;",
+    "hljs-punctuation": "color:#808030;"
+  };
+
+  let result = html;
+
+  for (const cls of Object.keys(map)) {
+    const regex = new RegExp(
+      `class=["']([^"']*\\b${cls}\\b[^"']*)["']`,
+      "g"
+    );
+    result = result.replace(regex, (_m, _classes) => {
+      return `style="${map[cls]}"`;
+    });
+  }
+
+  // Remove any remaining class attributes to avoid Outlook ignoring them
+  result = result.replace(/\sclass=["'][^"']*["']/g, "");
+
+  return result;
 }
-hello('Vincent');`;
 
-const App: React.FC = () => {
-  const [input, setInput] = useState(sample);
-  const [detectedLang, setDetectedLang] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [copiedHtml, setCopiedHtml] = useState(false);
-  const [copiedRtf, setCopiedRtf] = useState(false);
+export default function App() {
+  const [input, setInput] = useState(
+    `function hello(name) {
+  console.log("Hello, " + name + "!");
+}
+hello("Vincent");`
+  );
 
-  const highlighted = useMemo(() => {
-    if (!input.trim()) {
-      setDetectedLang(null);
-      return '';
-    }
-    const res = hljs.highlightAuto(input);
-    setDetectedLang(res.language || null);
-    return res.value;
-  }, [input]);
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(input);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleCopyHtml = async () => {
-    try {
-      const htmlOutput = generateOutlookHTML(highlighted, detectedLang);
-      const rtfOutput = generateRTF(highlighted, detectedLang);
-      const plainText = input;
-
-      // Create blobs for each format
-      const htmlBlob = new Blob([htmlOutput], { type: 'text/html' });
-      const rtfBlob = new Blob([rtfOutput], { type: 'text/rtf' });
-      const textBlob = new Blob([plainText], { type: 'text/plain' });
-
-      // Create ClipboardItem with all three formats
-      const data = [
-        new ClipboardItem({
-          'text/html': htmlBlob,
-          'text/rtf': rtfBlob,
-          'text/plain': textBlob,
-        }),
-      ];
-
-      await navigator.clipboard.write(data);
-      setCopiedHtml(true);
-      setTimeout(() => setCopiedHtml(false), 1200);
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleCopyRtf = async () => {
-    try {
-      const rtfOutput = generateRTF(highlighted, detectedLang);
-      
-      // Create a blob with RTF MIME type
-      const blob = new Blob([rtfOutput], { type: 'text/rtf' });
-      const data = [new ClipboardItem({ 'text/rtf': blob })];
-      
-      await navigator.clipboard.write(data);
-      setCopiedRtf(true);
-      setTimeout(() => setCopiedRtf(false), 1200);
-    } catch (e) {
-      console.error('RTF copy failed:', e);
-      // Fallback to plain text
-      try {
-        const rtfOutput = generateRTF(highlighted, detectedLang);
-        await navigator.clipboard.writeText(rtfOutput);
-        setCopiedRtf(true);
-        setTimeout(() => setCopiedRtf(false), 1200);
-      } catch (err) {
-        console.error(err);
-      }
-    }
-  };
-
-  useEffect(() => {
-    setCopied(false);
-    setCopiedHtml(false);
-    setCopiedRtf(false);
+  const highlightedInline = useMemo(() => {
+    if (!input.trim()) return "";
+    const raw = hljs.highlightAuto(input, ["javascript", "typescript", "csharp"]).value;
+    return toInlineStyles(raw);
   }, [input]);
 
   return (
-    <div className="app-root">
-      <header className="app-header">
-        <span className="brand">tohtml-terminal</span>
-        <span className="hint">paste → auto‑detect → highlight</span>
-      </header>
+    <div className="app">
+      <div className="pane">
+        <h2>Input</h2>
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          spellCheck={false}
+        />
+      </div>
 
-      <div className="panes">
-        {/* LEFT: INPUT */}
-        <div className="terminal-window">
-          <div className="terminal-header">
-            <div className="dots">
-              <span className="dot dot-red" />
-              <span className="dot dot-yellow" />
-              <span className="dot dot-green" />
-            </div>
-            <span className="terminal-title">input.js</span>
-          </div>
-          <div className="terminal-body">
-            <textarea
-              className="terminal-textarea"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              spellCheck={false}
-              placeholder="// paste your code here"
-            />
-          </div>
+      <div className="pane">
+        <h2>Output for Outlook</h2>
+        <div className="hint">
+          Select inside the box and press <strong>Ctrl+C</strong>, then paste into Outlook
+          with “Keep Source Formatting”.
         </div>
-
-        {/* RIGHT: OUTPUT */}
-        <div className="terminal-window">
-          <div className="terminal-header">
-            <div className="dots">
-              <span className="dot dot-red" />
-              <span className="dot dot-yellow" />
-              <span className="dot dot-green" />
-            </div>
-            <div className="terminal-title-row">
-              <span className="terminal-title">
-                {detectedLang ? `output (${detectedLang})` : 'output'}
-              </span>
-              <div className="button-group">
-                <button className="copy-btn" onClick={handleCopy}>
-                  {copied ? 'copied' : 'copy input'}
-                </button>
-                <button className="copy-btn" onClick={handleCopyHtml}>
-                  {copiedHtml ? 'copied' : 'copy html'}
-                </button>
-                <button className="copy-btn" onClick={handleCopyRtf}>
-                  {copiedRtf ? 'copied' : 'copy rtf'}
-                </button>
-              </div>
-            </div>
-          </div>
-          <div className="terminal-body output-body">
-            {input.trim() ? (
-              <pre className="code-pre">
-                <code
-                  className="hljs"
-                  dangerouslySetInnerHTML={{ __html: highlighted }}
-                />
-              </pre>
-            ) : (
-              <div className="placeholder">// waiting for input…</div>
-            )}
-          </div>
-        </div>
+        <pre
+          className="outlook-code"
+          // This is what the user will select and copy
+          dangerouslySetInnerHTML={{ __html: highlightedInline }}
+        />
       </div>
     </div>
   );
-};
-
-export default App;
+}
