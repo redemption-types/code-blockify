@@ -135,6 +135,11 @@ body {
   gap: 10px;
 }
 
+.button-group {
+  display: flex;
+  gap: 8px;
+}
+
 .terminal-title {
   font-size: 12px;
   color: var(--muted);

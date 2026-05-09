@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/atom-one-dark.css';
+import { generateOutlookHTML, generateRTF } from './htmlConverter';
 
 const sample = `function hello(name) {
   console.log('Hello, ' + name + '!');
@@ -11,6 +12,8 @@ const App: React.FC = () => {
   const [input, setInput] = useState(sample);
   const [detectedLang, setDetectedLang] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedHtml, setCopiedHtml] = useState(false);
+  const [copiedRtf, setCopiedRtf] = useState(false);
 
   const highlighted = useMemo(() => {
     if (!input.trim()) {
@@ -32,8 +35,63 @@ const App: React.FC = () => {
     }
   };
 
+  const handleCopyHtml = async () => {
+    try {
+      const htmlOutput = generateOutlookHTML(highlighted, detectedLang);
+      const rtfOutput = generateRTF(highlighted, detectedLang);
+      const plainText = input;
+
+      // Create blobs for each format
+      const htmlBlob = new Blob([htmlOutput], { type: 'text/html' });
+      const rtfBlob = new Blob([rtfOutput], { type: 'text/rtf' });
+      const textBlob = new Blob([plainText], { type: 'text/plain' });
+
+      // Create ClipboardItem with all three formats
+      const data = [
+        new ClipboardItem({
+          'text/html': htmlBlob,
+          'text/rtf': rtfBlob,
+          'text/plain': textBlob,
+        }),
+      ];
+
+      await navigator.clipboard.write(data);
+      setCopiedHtml(true);
+      setTimeout(() => setCopiedHtml(false), 1200);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleCopyRtf = async () => {
+    try {
+      const rtfOutput = generateRTF(highlighted, detectedLang);
+      
+      // Create a blob with RTF MIME type
+      const blob = new Blob([rtfOutput], { type: 'text/rtf' });
+      const data = [new ClipboardItem({ 'text/rtf': blob })];
+      
+      await navigator.clipboard.write(data);
+      setCopiedRtf(true);
+      setTimeout(() => setCopiedRtf(false), 1200);
+    } catch (e) {
+      console.error('RTF copy failed:', e);
+      // Fallback to plain text
+      try {
+        const rtfOutput = generateRTF(highlighted, detectedLang);
+        await navigator.clipboard.writeText(rtfOutput);
+        setCopiedRtf(true);
+        setTimeout(() => setCopiedRtf(false), 1200);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
+
   useEffect(() => {
     setCopied(false);
+    setCopiedHtml(false);
+    setCopiedRtf(false);
   }, [input]);
 
   return (
@@ -77,9 +135,17 @@ const App: React.FC = () => {
               <span className="terminal-title">
                 {detectedLang ? `output (${detectedLang})` : 'output'}
               </span>
-              <button className="copy-btn" onClick={handleCopy}>
-                {copied ? 'copied' : 'copy input'}
-              </button>
+              <div className="button-group">
+                <button className="copy-btn" onClick={handleCopy}>
+                  {copied ? 'copied' : 'copy input'}
+                </button>
+                <button className="copy-btn" onClick={handleCopyHtml}>
+                  {copiedHtml ? 'copied' : 'copy html'}
+                </button>
+                <button className="copy-btn" onClick={handleCopyRtf}>
+                  {copiedRtf ? 'copied' : 'copy rtf'}
+                </button>
+              </div>
             </div>
           </div>
           <div className="terminal-body output-body">
